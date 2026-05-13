@@ -13,7 +13,7 @@ import subprocess
 import sys
 
 TRIGGERS = ["git push", "gh pr create", "gh pr merge"]
-DIFF_CHAR_LIMIT = 15_000
+DIFF_CHAR_LIMIT = 15_000  # ~3k tokens of diff context
 
 
 def run(args: list[str], cwd: str) -> tuple[str, int]:
@@ -145,6 +145,9 @@ def call_claude(pr: dict, diff: str, issues_text: str, checks_text: str) -> str:
 
 
 def main() -> None:
+    with open("C:/Users/bigchungus/hook_debug.log", "a") as f:
+        f.write("hook invoked\n")
+
     raw = sys.stdin.read()
     if not raw:
         sys.exit(0)
