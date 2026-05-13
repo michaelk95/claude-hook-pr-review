@@ -11,9 +11,16 @@ import json
 import os
 import subprocess
 import sys
+import time
 
 TRIGGERS = ["git push", "gh pr create", "gh pr merge"]
 DIFF_CHAR_LIMIT = 15_000
+PR_POLL_ATTEMPTS = 5
+PR_POLL_INTERVAL = 3  # seconds between attempts
+
+
+def log(msg: str) -> None:
+    print(f"[pr-review] {msg}", file=sys.stderr)
 
 
 def run(args: list[str], cwd: str) -> tuple[str, int]:
@@ -21,33 +28,54 @@ def run(args: list[str], cwd: str) -> tuple[str, int]:
     return result.stdout.strip(), result.returncode
 
 
-def get_pr_info(cwd: str) -> dict | None:
+def poll_for_pr(cwd: str) -> dict | None:
     fields = "number,title,body,headRefName,closingIssuesReferences,statusCheckRollup"
-    out, code = run(["gh", "pr", "view", "--json", fields], cwd)
-    if code != 0 or not out:
-        return None
-    try:
-        return json.loads(out)
-    except json.JSONDecodeError:
-        return None
+    for attempt in range(1, PR_POLL_ATTEMPTS + 1):
+        log(f"looking for open PR (attempt {attempt}/{PR_POLL_ATTEMPTS})...")
+        out, code = run(["gh", "pr", "view", "--json", fields], cwd)
+        if code == 0 and out:
+            try:
+                pr = json.loads(out)
+                log(f"found PR #{pr.get('number')}: {pr.get('title')}")
+                return pr
+            except json.JSONDecodeError:
+                log("gh returned invalid JSON, retrying...")
+        else:
+            log("no PR found yet")
+
+        if attempt < PR_POLL_ATTEMPTS:
+            log(f"waiting {PR_POLL_INTERVAL}s before next attempt...")
+            time.sleep(PR_POLL_INTERVAL)
+
+    log(f"no PR found after {PR_POLL_ATTEMPTS} attempts — skipping review")
+    return None
 
 
 def get_diff(cwd: str) -> str:
+    log("fetching PR diff...")
     out, code = run(["gh", "pr", "diff"], cwd)
     if code != 0 or not out:
+        log("diff unavailable")
         return "(diff unavailable)"
     if len(out) > DIFF_CHAR_LIMIT:
+        log(f"diff truncated to {DIFF_CHAR_LIMIT} chars")
         return out[:DIFF_CHAR_LIMIT] + f"\n... (truncated at {DIFF_CHAR_LIMIT} chars)"
+    log(f"diff fetched ({len(out)} chars)")
     return out
 
 
 def get_checks(cwd: str) -> list[dict]:
+    log("fetching CI checks...")
     out, code = run(["gh", "pr", "checks", "--json", "name,state,bucket"], cwd)
     if code not in (0, 8) or not out:  # exit 8 = checks still pending
+        log("no CI checks available yet")
         return []
     try:
-        return json.loads(out)
+        checks = json.loads(out)
+        log(f"fetched {len(checks)} CI check(s)")
+        return checks
     except json.JSONDecodeError:
+        log("invalid JSON from gh pr checks")
         return []
 
 
@@ -63,16 +91,20 @@ def get_issue(number: int, cwd: str) -> dict | None:
 
 def build_issues_text(closing_refs: list[dict], cwd: str) -> str:
     if not closing_refs:
+        log("no linked issues found in PR")
         return "(no linked issues found — PR description should reference the ticket with 'Closes #N')"
     parts = []
     for ref in closing_refs:
         number = ref.get("number")
         if number is None:
             continue
+        log(f"fetching linked issue #{number}...")
         issue = get_issue(number, cwd)
         if issue:
+            log(f"fetched issue #{number}: {issue.get('title')}")
             parts.append(f"Issue #{number}: {issue.get('title', '')}\n{issue.get('body', '')}")
         else:
+            log(f"could not fetch issue #{number}")
             parts.append(f"Issue #{number}: (could not fetch details)")
     return "\n\n".join(parts) if parts else "(no issue details retrieved)"
 
@@ -92,13 +124,13 @@ def build_checks_text(checks: list[dict]) -> str:
 def call_claude(pr: dict, diff: str, issues_text: str, checks_text: str) -> str:
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
-        print("pr_reviewer: ANTHROPIC_API_KEY not set", file=sys.stderr)
+        log("ANTHROPIC_API_KEY not set — skipping review")
         return "(review skipped — ANTHROPIC_API_KEY not set)"
 
     try:
         import anthropic
     except ImportError:
-        print("pr_reviewer: 'anthropic' package not installed", file=sys.stderr)
+        log("'anthropic' package not installed — skipping review")
         return "(review skipped — install 'anthropic' in your Python environment)"
 
     pr_summary = (
@@ -135,12 +167,14 @@ def call_claude(pr: dict, diff: str, issues_text: str, checks_text: str) -> str:
 {checks_text}
 """
 
+    log("calling Claude API for review...")
     client = anthropic.Anthropic(api_key=api_key)
     response = client.messages.create(
         model="claude-sonnet-4-6",
         max_tokens=1024,
         messages=[{"role": "user", "content": prompt}],
     )
+    log("review complete")
     return response.content[0].text
 
 
@@ -158,10 +192,12 @@ def main() -> None:
     if not any(t in command for t in TRIGGERS):
         sys.exit(0)
 
+    log(f"trigger matched: {command!r}")
     cwd = hook_input.get("cwd") or os.getcwd()
+    log(f"working directory: {cwd}")
 
     try:
-        pr = get_pr_info(cwd)
+        pr = poll_for_pr(cwd)
         if pr is None:
             sys.exit(0)
 
@@ -187,7 +223,7 @@ def main() -> None:
         sys.exit(0)
 
     except Exception as exc:
-        print(f"pr_reviewer error: {exc}", file=sys.stderr)
+        log(f"unexpected error: {exc}")
         print(json.dumps({"continue": True}))
         sys.exit(0)
 
