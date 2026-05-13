@@ -12,6 +12,15 @@ import os
 import subprocess
 import sys
 
+_DOTENV_PATH = os.path.join(os.path.dirname(__file__), ".env")
+if os.path.exists(_DOTENV_PATH):
+    with open(_DOTENV_PATH) as _f:
+        for _line in _f:
+            _line = _line.strip()
+            if _line and not _line.startswith("#") and "=" in _line:
+                _k, _, _v = _line.partition("=")
+                os.environ.setdefault(_k.strip(), _v.strip())
+
 TRIGGERS = ["git push", "gh pr create", "gh pr merge"]
 DIFF_CHAR_LIMIT = 15_000
 
@@ -176,12 +185,9 @@ def main() -> None:
         pr_number = pr.get("number", "?")
         output = {
             "continue": True,
-            "hookSpecificOutput": {
-                "hookEventName": "PostToolUse",
-                "additionalContext": (
-                    f"\n\n---\n🔍 **Automated PR Review — PR #{pr_number}**\n\n{review}\n---"
-                ),
-            },
+            "additionalContext": (
+                f"\n\n---\n🔍 **Automated PR Review — PR #{pr_number}**\n\n{review}\n---"
+            ),
         }
         print(json.dumps(output))
         sys.exit(0)
