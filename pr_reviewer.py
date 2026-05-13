@@ -13,7 +13,7 @@ import subprocess
 import sys
 
 TRIGGERS = ["git push", "gh pr create", "gh pr merge"]
-DIFF_CHAR_LIMIT = 15_000
+DIFF_CHAR_LIMIT = 15_000  # ~3k tokens of diff context
 
 
 def run(args: list[str], cwd: str) -> tuple[str, int]:
