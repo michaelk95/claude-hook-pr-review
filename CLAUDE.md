@@ -86,3 +86,4 @@ The hook always exits with code `0` so it can never block Claude. Errors are wri
 echo '{"tool_input":{"command":"git push origin main"},"cwd":"C:\\path\\to\\your\\repo"}' \
   | python pr_reviewer.py
 ```
+
