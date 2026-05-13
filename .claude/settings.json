@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python D:\\coding_projects\\hook_git_pr_reviewer\\pr_reviewer.py",
+            "timeout": 120
+          }
+        ]
+      }
+    ]
+  }
+}
