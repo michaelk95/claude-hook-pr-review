@@ -145,6 +145,9 @@ def call_claude(pr: dict, diff: str, issues_text: str, checks_text: str) -> str:
 
 
 def main() -> None:
+    with open("C:/Users/bigchungus/hook_debug.log", "a") as f:
+        f.write("hook invoked\n")
+
     raw = sys.stdin.read()
     if not raw:
         sys.exit(0)
