@@ -7,7 +7,7 @@ A Claude Code `PostToolUse` hook that automatically reviews pull requests after 
 After every Bash command that includes `git push`, `gh pr create`, or `gh pr merge`, the hook:
 
 1. Fetches PR metadata, diff, CI check results, and linked GitHub issues via the `gh` CLI
-2. Calls the Claude API (`claude-opus-4-7`) with a structured review prompt
+2. Calls the Claude API (`claude-sonnet-4-6`) with a structured review prompt
 3. Returns the review as `additionalContext` so Claude Code surfaces it in the next assistant message
 
 The review covers:

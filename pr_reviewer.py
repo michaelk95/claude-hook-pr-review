@@ -137,7 +137,7 @@ def call_claude(pr: dict, diff: str, issues_text: str, checks_text: str) -> str:
 
     client = anthropic.Anthropic(api_key=api_key)
     response = client.messages.create(
-        model="claude-opus-4-7",
+        model="claude-sonnet-4-6",
         max_tokens=1024,
         messages=[{"role": "user", "content": prompt}],
     )
